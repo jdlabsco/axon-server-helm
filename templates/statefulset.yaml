@@ -1,0 +1,109 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "axon-server.fullname" . }}
+  labels:
+    {{- include "axon-server.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ template "axon-server.name" . }}
+  replicas: {{ .Values.replicaCount }}
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      {{- include "axon-server.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+    {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      labels:
+        {{- include "axon-server.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "axon-server.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          env:
+            - name: SERVER_PORT
+              value: {{ .Values.service.gui.port | quote }}
+            - name: AXONIQ_AXONSERVER_PORT
+              value: {{ .Values.service.grpc.port | quote }}
+            - name: JAVA_TOOL_OPTIONS
+              value: {{ include "axon-server.finalJvmOptions" . }}
+            #- name: AXONIQ_AXONSERVER_NAME
+            #  value: "tbd statefulset container name?"
+            #- name: AXONIQ_AXONSERVER_HOSTNAME
+            #  value: "tbd statefulset container name?"
+            {{- if .Values.serverDomain }}
+            - name: AXONIQ_AXONSERVER_DOMAIN
+              value:  {{ .Values.serverDomain }}
+            {{- end }}
+            {{- if .Values.config.accessControl.enabled }}
+            - name: AXONIQ_AXONSERVER_ACCESSCONTROL_ENABLED
+              value: true
+            - name: AXONIQ_AXONSERVER_ACCESSCONTROL_TOKEN
+              value: {{- .Values.config.accessControl.token }}
+            {{- end }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: grpc
+              containerPort: {{ .Values.service.grpc.port }}
+              protocol: TCP
+            - name: gui
+              containerPort: {{ .Values.service.gui.port }}
+              protocol: TCP
+          #livenessProbe:
+          #  httpGet:
+          #    path: /
+          #    port: http
+          readinessProbe:
+            httpGet:
+              path: /actuator/info
+              port: gui
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 1
+          volumeMounts:
+          - name: data
+            mountPath: /data
+          - name: eventstore
+            mountPath: /eventdata
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  volumeClaimTemplates:
+    - metadata:
+        name: eventstore
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 16Gi
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 3Gi
