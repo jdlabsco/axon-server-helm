@@ -7,10 +7,10 @@ metadata:
 spec:
   type: {{ .Values.service.grpc.type }}
   ports:
-    - port: {{ .Values.service.grpc.port }}
-      targetPort: grpc
+    - name: grpc-port
+      port: {{ .Values.service.grpc.port }}
       protocol: TCP
-      name: grpc
+      targetPort: 8124
   selector:
     {{- include "axon-server.selectorLabels" . | nindent 4 }}
 
@@ -25,9 +25,9 @@ metadata:
 spec:
   type: {{ .Values.service.gui.type }}
   ports:
-    - port: {{ .Values.service.gui.port }}
-      targetPort: gui
+    - name: http
+      port: {{ .Values.service.gui.port }}
       protocol: TCP
-      name: gui
+      targetPort: 8024
   selector:
     {{- include "axon-server.selectorLabels" . | nindent 4 }}
