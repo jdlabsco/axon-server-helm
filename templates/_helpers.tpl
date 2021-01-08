@@ -63,12 +63,15 @@ Create the name of the service account to use
 {{- end }}
 
 {{/*
-Create the name of the service account to use
+Concatenate all JVM options into one string for the command line
 */}}
 {{- define "axon-server.finalJvmOptions" -}}
-{{- with .Values.java.jvmOptions }}
-{{- $finalOptions := default "" .additionnalOptions -}}
+{{- $finalOptions := "" -}}
+{{- if .Values.config.java }}
+{{- with .Values.config.java.jvmOptions }}
+{{- $finalOptions = default "" .additionnalOptions -}}
 {{- $finalOptions = cat $finalOptions .memoryOptions .memoryErrorOptions .timezoneOptions .networkingOptions -}}
-{{- $finalOptions -}}
 {{- end }}
+{{- end }}
+{{- $finalOptions -}}
 {{- end }}

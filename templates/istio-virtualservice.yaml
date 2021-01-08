@@ -1,0 +1,59 @@
+{{- if .Values.virtualservices.enabled -}}
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: gui
+  labels:
+    {{- include "axon-server.labels" . | nindent 4 }}
+spec:
+  hosts:
+  {{- range .Values.virtualservices.gui.hosts }}
+  - {{ . }}
+  {{- end }}
+  gateways:
+  {{- range .Values.virtualservices.gui.gateways }}
+  - {{ . }}
+  {{- end }}
+  http:
+  - route:
+    - destination:
+        host: {{ include "axon-server.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local
+        port:
+          number: 8024
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: gui
+spec:
+  host: {{ include "axon-server.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local
+  trafficPolicy:
+    loadBalancer:
+      consistentHash:
+        httpCookie:
+          name: istio
+          path: /
+          ttl: 0s
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: grpc
+  labels:
+    {{- include "axon-server.labels" . | nindent 4 }}
+spec:
+  hosts:
+  {{- range .Values.virtualservices.grpc.hosts }}
+  - {{ . }}
+  {{- end }}
+  gateways:
+  {{- range .Values.virtualservices.grpc.gateways }}
+  - {{ . }}
+  {{- end }}
+  http:
+  - route:
+    - destination:
+        host: {{ include "axon-server.fullname" . }}-grpc.{{ .Release.Namespace }}.svc.cluster.local
+        port:
+          number: 8124
+{{- end -}}

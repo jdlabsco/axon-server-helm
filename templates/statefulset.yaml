@@ -42,9 +42,9 @@ spec:
         - name: server
           env:
             - name: SERVER_PORT
-              value: {{ .Values.service.gui.port | quote }}
+              value: {{ .Values.services.gui.port | quote }}
             - name: AXONIQ_AXONSERVER_PORT
-              value: {{ .Values.service.grpc.port | quote }}
+              value: {{ .Values.services.grpc.port | quote }}
             - name: JAVA_TOOL_OPTIONS
               value: {{ include "axon-server.finalJvmOptions" . }}
             #- name: AXONIQ_AXONSERVER_NAME
@@ -54,16 +54,6 @@ spec:
             {{- if not (eq .Values.image.repository "axoniq/axonserver") }}
             - name: AXONIQ_LICENSE
               value: "/axonserveree/license/axoniq.license"
-            {{- end }}
-            {{- if .Values.serverDomain }}
-            - name: AXONIQ_AXONSERVER_DOMAIN
-              value:  {{ .Values.serverDomain }}
-            {{- end }}
-            {{- if .Values.config.accessControl.enabled }}
-            - name: AXONIQ_AXONSERVER_ACCESSCONTROL_ENABLED
-              value: true
-            - name: AXONIQ_AXONSERVER_ACCESSCONTROL_TOKEN
-              value: {{- .Values.config.accessControl.token }}
             {{- end }}
             {{- if .Values.extraEnvs }}
               {{- toYaml .Values.extraEnvs | nindent 12 }}
@@ -87,10 +77,10 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: grpc-port
-              containerPort: {{ .Values.service.grpc.port }}
+              containerPort: {{ .Values.services.grpc.port }}
               protocol: TCP
             - name: http-gui
-              containerPort: {{ .Values.service.gui.port }}
+              containerPort: {{ .Values.services.gui.port }}
               protocol: TCP
           livenessProbe:
             httpGet:
@@ -122,13 +112,11 @@ spec:
           - name: config
             mountPath: /config
             readOnly: true
-            configMap:
-              name: axonserver-properties
           {{- end }}
           {{- else }}
           - name: data
             mountPath: /axonserveree/data
-          - name: events
+          - name: eventstore
             mountPath: /axonserveree/events
           - name: log
             mountPath: /axonserveree/log
@@ -136,8 +124,6 @@ spec:
           - name: config
             mountPath: /axonserveree/config
             readOnly: true
-            configMap:
-              name: axonserver-properties
           {{- end }}
           - name: system-token
             mountPath: /axonserveree/security
@@ -167,14 +153,35 @@ spec:
       volumes:
       - name: tmp
         emptyDir: {}
-      {{ if not .Values.persistence.enabled }}
+      {{- if not .Values.persistence.enabled }}
       - name: data
         emptyDir: {}
       - name: eventstore
         emptyDir: {}
       - name: log
         emptyDir: {}
-      {{ end }}
+      {{- end }}
+      {{- if .Values.configMapServerProperties }}
+      - name: config
+        configMap:
+          name: {{ include "axon-server.fullname" . }}-properties
+      {{- end }}
+      {{- if not (eq .Values.image.repository "axoniq/axonserver") }}
+      - name: system-token
+        secret:
+          {{- if .Values.config.token }}
+          secretName: {{ include "axon-server.fullname" . }}-token
+          {{- else }}
+          secretName: {{ .Values.config.existingSecrets.tokenSecretName }}
+          {{- end }}
+      - name: license
+        secret:
+          {{- if .Values.config.license }}
+          secretName: {{ include "axon-server.fullname" . }}-license
+          {{- else }}
+          secretName: {{ .Values.config.existingSecrets.licenseSecretName }}
+          {{- end }}
+      {{- end }}
   {{- if .Values.persistence.enabled }}
   volumeClaimTemplates:
     - metadata:
@@ -211,3 +218,15 @@ spec:
       {{- toYaml .Values.extraVolumeClaimTemplates | nindent 4 }}
     {{- end }}
   {{- end }}
+---
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "axon-server.fullname" . }}
+  labels:
+    {{- include "axon-server.labels" . | nindent 4 }}
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}

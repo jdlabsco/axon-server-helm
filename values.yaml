@@ -9,19 +9,43 @@ image:
 
 config:
   serverDomain: nonprod.axon
-  accessControl:
-    enabled: false
-    token: ~
+  internalToken: ~
 
-configMapServerProperties: ~
+  # For the Axon Server security token and license, you can manage them with the chart or externally.
+  # If you wish to manage them outside the chart, leave these two values to nil and set the existingSecrets' names
+  token: ~
+  license: ~
+  # license: |
+  #   #AxonIQ License File generated on 1970-01-01
+  #   #Thu Jan 01 00:00:00 UTC 1970
+  #   license_key_id=00000000-0000-0000-0000-000000000000
+  #   signature=veryLongSignatureString
+  #   ...
+  #   product=AxonServer
+  #   licensee=Croix Bleue
+  #   clusterNodes=3
+  existingSecrets: {}
+  # tokenSecretName: some-secret
+  # licenseSecretName: another-secret
+  # # See the following example on how to create these secrets:
+  # # https://github.com/AxonIQ/running-axon-server/blob/master/3-k8s/2-k8s-ee/create-secrets.sh#L23-L24
 
-java:
-  jvmOptions:
-    additionnalOptions: ~
-    memoryOptions: "-XX:MinRAMPercentage=75 -XX:MaxRAMPercentage=85"
-    memoryErrorOptions: "-XX:+ExitOnOutOfMemoryError -XX:+CrashOnOutOfMemoryError"
-    timezoneOptions: "-Duser.timezone=UTC"
-    networkingOptions: "-Dnetworkaddress.cache.ttl=0 -Dnetworkaddress.cache.negative.ttl=0"
+  # If propertiesFileData is nil, a default config file will be created
+  propertiesFileData: ~
+  # propertiesFileData: |
+  #   axoniq.axonserver.devmode.enabled=true
+  #   axoniq.axonserver.accesscontrol.enabled=true
+
+  java:
+    jvmOptions:
+      additionnalOptions: ~
+      # Depending on your memory configuration, you might want to raise or lower these percentages.
+      # The more memory you assign, the higher the percentages can be.
+      memoryOptions: "-XX:MinRAMPercentage=75 -XX:MaxRAMPercentage=85"
+      # We suggests to crash and exit immediately on OOM errors so that Kubernetes will start a new and healthy container
+      memoryErrorOptions: "-XX:+ExitOnOutOfMemoryError -XX:+CrashOnOutOfMemoryError"
+      timezoneOptions: "-Duser.timezone=UTC"
+      networkingOptions: "-Dnetworkaddress.cache.ttl=0 -Dnetworkaddress.cache.negative.ttl=0"
 
 imagePullSecrets: []
 
@@ -43,14 +67,18 @@ securityContext:
   runAsNonRoot: true
   runAsUser: 1001
 
-service:
+services:
   gui:
     type: LoadBalancer
     port: 8024
   grpc:
     type: ClusterIP
     port: 8124
+  internalGrpc:
+    type: ClusterIP
+    port: 8224
 
+# This chart only exposes the GUI port through a k8s ingress
 ingress:
   enabled: false
   annotations: {}
@@ -65,7 +93,6 @@ ingress:
   #    hosts:
   #      - chart-example.local
 
-
 persistence:
   enabled: false
   # This chart can use the standard storage class, use an already existing custom class or create and use
@@ -77,7 +104,7 @@ persistence:
   #
   # customStorageClass: true
   #
-  # Regardless of customStorageClass, storageClass can be provider for claims template to be created using that
+  # Regardless of customStorageClass, storageClass can be provided for claims template to be created using that
   # storageClass. The parameters storageProvisioner and storageParameters are only used by the StorageClass manifest
   #
   # storageClassName: standard
@@ -87,8 +114,8 @@ persistence:
   #   iopsPerGB: "10"
   #   fsType: ext4
 
-  accessModes:  [ReadWriteOnce]
-  ## Storage Capacities for persistent volumes
+  accessModes: [ReadWriteOnce]
+
   # Storage capacity for the 'data' directory, which is used to hold things such as the flow.xml.gz, configuration, state, etc.
   eventstoreStorage:
     size: 16Gi
@@ -152,31 +179,37 @@ extraSidecarContainers: []
 virtualservices:
   enabled: false
 
-  # More than one service can be defined if, eg, you have two different gateways listenuing on different hostnames
-  services: []
-  #  - hosts:
-  #    - chart-example.local
-  #    - chart-example-two.local
-  #    gateways:
-  #    - istio-system/my-istio-gateway
-  #    ## todo: routes, etc.
-  #
+  gui:
+    gateways: []
+    # - istio-system/my-istio-gateway
+    hosts: []
+    # - ui.axon.example.domain
+  grpc:
+    gateways: []
+    # - istio-system/my-istio-gateway
+    hosts: []
+    # - grpc.axon.example.domain
 
-persistence:
-  storageSize: 8Gi
-  ## If defined, storageClass: <storageClass>
-  ## If set to "-", storageClass: "", which disables dynamic provisioning
-  ## If undefined (the default) or set to null, no storageClass spec is
-  ##   set, choosing the default provisioner.  (gp2 on AWS, standard on
-  ##   GKE, AWS & OpenStack)
-  ##
-  # existingClaim:
-  # annotations:
-  #  "helm.sh/resource-policy": keep
-  # storageClass: "-"
-  # If PersistentDisk already exists you can create a PV for it by including the 2 following keypairs.
-  # pdName: nexus-data-disk
-  # fsType: ext4
+  # Istio security rules:
+  rules: []
+  # # eg:
+  # - from:
+  #   - source:
+  #      namespaces: ["istio-system"]
+  #   to:
+  #   - operation:
+  #       ports:
+  #       - "8024"
+  #       - "8124"
+  #  - from:
+  #    - source:
+  #        namespaces: ["axonserveree-nonprod"]
+  #    to:
+  #    - operation:
+  #        ports:
+  #        - "8024"
+  #        - "8124"
+  #        - "8224"
 
 resources: {}
   # We usually recommend not to specify default resources and to leave this as a conscious
@@ -195,4 +228,17 @@ nodeSelector: {}
 
 tolerations: []
 
-affinity: {}
+# By default, we suggest to run the Axon server EE instances on different Kubernetes nodes
+# (no impact for SE)
+# Note that if you install multiple Axon server EE, you could colocate different server's instances on the same
+# host. In order to do this you should change the "values" key down there
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+    - labelSelector:
+        matchExpressions:
+        - key: app.kubernetes.io/instance
+          operator: In
+          values:
+          - axonserver
+      topologyKey: kubernetes.io/hostname

@@ -1,0 +1,17 @@
+{{- if (and .Values.virtualservices.enabled .Values.virtualservices.rules) -}}
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: {{ include "axon-server.fullname" . }}
+  labels:
+    {{- include "axon-server.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "axon-server.selectorLabels" . | nindent 6 }}
+  rules:
+    {{- if .Values.virtualservices.rules -}}
+    {{ toYaml .Values.virtualservices.rules | nindent 4 }}
+    {{- end }}
+{{- end }}

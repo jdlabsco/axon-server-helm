@@ -1,9 +1,15 @@
-{{- if .Values.configMapServerProperties }}
+{{- if not .Values.config.propertiesFileData }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: axonserver-properties
+  name: {{ include "axon-server.fullname" . }}-properties
 data:
-  conf.properties: |
-    axoniq.axonserver.devmode.enabled=true
+  axonserver.properties: |
+    axoniq.axonserver.autocluster.first={{ include "axon-server.fullname" . }}-0.{{ .Release.Namespace }}.svc.cluster.local
+    axoniq.axonserver.autocluster.contexts=_admin,default
+    axoniq.axonserver.domain={{ .Release.Namespace }}.svc.cluster.local
+    axoniq.axonserver.internal-domain={{ .Release.Namespace }}.svc.cluster.local
+    axoniq.axonserver.accesscontrol.enabled=true
+    axoniq.axonserver.accesscontrol.internal-token={{ .Values.config.internalToken }}
+    axoniq.axonserver.accesscontrol.systemtokenfile=/axonserveree/security/axonserver.token
 {{- end }}

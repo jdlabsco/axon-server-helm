@@ -5,17 +5,15 @@ metadata:
   labels:
     {{- include "axon-server.labels" . | nindent 4 }}
 spec:
-  type: {{ .Values.service.grpc.type }}
+  type: {{ .Values.services.grpc.type }}
   ports:
     - name: grpc-port
-      port: {{ .Values.service.grpc.port }}
+      port: {{ .Values.services.grpc.port }}
       protocol: TCP
       targetPort: 8124
   selector:
     {{- include "axon-server.selectorLabels" . | nindent 4 }}
-
 ---
-
 apiVersion: v1
 kind: Service
 metadata:
@@ -23,11 +21,30 @@ metadata:
   labels:
     {{- include "axon-server.labels" . | nindent 4 }}
 spec:
-  type: {{ .Values.service.gui.type }}
+  type: {{ .Values.services.gui.type }}
   ports:
     - name: http
-      port: {{ .Values.service.gui.port }}
+      port: {{ .Values.services.gui.port }}
       protocol: TCP
       targetPort: 8024
   selector:
     {{- include "axon-server.selectorLabels" . | nindent 4 }}
+
+{{- range $i, $e := until ($.Values.replicaCount | int) }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "axon-server.fullname" $ }}-{{ $i }}
+  labels:
+    {{- include "axon-server.labels" $ | nindent 4 }}
+spec:
+  type: {{ $.Values.services.grpc.type }}
+  ports:
+    - name: grpc-port-internal
+      port: {{ $.Values.services.internalGrpc.port }}
+      protocol: TCP
+      targetPort: 8224
+  selector:
+    statefulset.kubernetes.io/pod-name: {{ include "axon-server.fullname" $ }}-{{ $i }}
+{{- end }}
